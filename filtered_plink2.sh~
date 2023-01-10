@@ -1,0 +1,51 @@
+#!/bin/bash
+#SBATCH --time=00:30:00
+#SBATCH --job-name=Plink20
+#SBATCH --partition=Orion
+#SBATCH --ntasks-per-node=12
+#SBATCH --mem=48GB
+
+#update this if running the pipeline from a different directory
+TMP_PATH=/nobackup/mougeots_research/micaela_beckman/gvhd_exome
+
+IN_DIR=$TMP_PATH/vcf_filtered.recode.vcf
+OUT_DIR=$TMP_PATH/Plink2/
+PHENO_1=$TMP_PATH/Plink19/GVHD.fam
+UPDATE_SEX=$TMP_PATH/Plink19/update_sex
+EIGENVEC=$TMP_PATH/Plink2/output_data/plink.eigenvec
+
+echo "======================================================"
+echo "Start Time  : $(date)"
+echo "Submit Dir  : $SLURM_SUBMIT_DIR"
+echo "Job ID/Name : $SLURM_JOBID / $SLURM_JOB_NAME"
+echo "Num Tasks   : $SLURM_NTASKS total [$SLURM_NNODES nodes @ $SLURM_CPUS_ON_NODE CPUs/node]"
+echo "======================================================"
+echo ""
+
+module load plink/2.00
+
+# Purge existing files from output dir
+#rm $OUT_DIR/* 
+
+# Plink vcf to binary
+plink2 \
+--vcf $IN_DIR               `# INPUT:   Merged VCF` \
+--double-id                 `# OPTION:  Sync FID and IID, necc. for interop betwn Plink 1.9-2.0` \
+--make-just-bim                 `# OUTPUT:  Plink2 binary files` \
+--allow-extra-chr           `# OPTION:  Allow alternate chromosome names` \
+--update-sex $UPDATE_SEX    `# INPUT:   Update plink binary files to include sex` \
+--pca meanimpute            `# OUTPUT:  PCA stats, meanimpute solves for high genotype missingness` \
+--freq                      `# OUTPUT:  Allele frequencies` \
+--out $OUT_DIR/plink_vcffiltered
+
+# Plink
+plink2 \
+--pfile $OUT_DIR/plink_vcffiltered  `# INPUT:   Plink binary files generated above` \
+--double-id             `# OPTION:  Sync FID and IID, necc. for interop betwn Plink 1.9-2.0` \
+--chr 1-22              `# FILTER:  Restrict analysis to autosomes only` \
+--allow-extra-chr       `# OPTION:  Allow alternate chromosome names` \
+--pheno $PHENO_1        `# INPUT:   Phenotype file` \
+--glm allow-no-covars   `# OUTPUT:  Linear/Logistic regression, association analysis (wo Prin. Comps. as covars)` \
+--ci 0.95               `# OPTION:  Output confidence interval with assoc file` \
+--pfilter 1             `# FILTER:  Remove 'NA' p-values` \
+--out $OUT_DIR/filtered_nopca
